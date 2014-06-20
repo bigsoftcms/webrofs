@@ -53,7 +53,7 @@ class WebROFs(LoggingMixIn, Operations):
 
     def read(self, path, size, offset, fh):
         try:
-            return urllib.request.urlopen(self.url + path + "2").read()[offset:(offset + size)]
+            return urllib.request.urlopen(self.url + path).read()[offset:(offset + size)]
         except KeyError:
             raise FuseOSError(ENOENT)
         except urllib.error.HTTPError:
