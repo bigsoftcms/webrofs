@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+
+from __future__ import with_statement
+
+from errno import EACCES
+from os.path import realpath
+from sys import argv, exit
+from threading import Lock
+from errno import *
+
+import os
+
+from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
+
+import urllib.request
+import urllib.error
+import pickle
+
+
+class WebROFs(LoggingMixIn, Operations):
+    def __init__(self, url):
+        self.url = url
+        # download manifest
+        self._folders = {}
+        self._files = {}
+        self._links = {}
+        self._load_manifest()
+
+    def _load_manifest(self):
+        try:
+            mfile = self.url + "/manifest"
+            response = urllib.request.urlopen(mfile)
+            charset = response.info().get_param('charset', 'utf-8')
+            data = response.read().decode(charset)
+            for line in data.split("\n"):
+                if not line == "":
+                    line = line.split("|")
+                    if line[0] == "F":
+                        # this is a folder
+                        self._folders[line[1]] = []
+                        self._files[line[1]] = line[2:]
+                    elif line[0] == "S":
+                        self._links[line[1]] = line[2]
+                    else:
+                        # this is a file
+                        fullpath = os.path.join(line[0], line[1])
+                        self._files[fullpath] = line[2:]
+                        self._folders[line[0]].append(line[1])
+        except Exception as e:
+            print("Could not load manifest for volume " + mfile)
+            print(e)
+            raise SystemExit()
+
+    def read(self, path, size, offset, fh):
+        try:
+            return urllib.request.urlopen(self.url + path + "2").read()[offset:(offset + size)]
+        except KeyError:
+            raise FuseOSError(ENOENT)
+        except urllib.error.HTTPError:
+            raise FuseOSError(EREMOTEIO)
+        except:
+            raise FuseOSError(EIO)
+
+    def readlink(self, path):
+        try:
+            return self._links[path]
+        except KeyError:
+            raise FuseOSError(ENOENT)
+        except:
+            raise FuseOSError(EIO)
+
+    def getattr(self, path, fh=None):
+        return {'st_atime': float(self._files[path][0]), 
+            'st_ctime': float(self._files[path][1]),
+            'st_gid': int(self._files[path][2]), 
+            'st_mode': int(self._files[path][3]),
+            'st_mtime': float(self._files[path][4]), 
+            'st_nlink': int(self._files[path][5]), 
+            'st_size': int(self._files[path][6]), 
+            'st_uid': int(self._files[path][7])}
+
+    def readdir(self, path, fh):
+        rlist = ['.', '..']
+        for f in self._folders[path]:
+            rlist.append(f)
+        return rlist
+
+
+if __name__ == '__main__':
+    if len(argv) != 3:
+        print('usage: %s <url> <mountpoint>' % argv[0])
+        exit(1)
+
+    fuse = FUSE(WebROFs(argv[1]), argv[2], foreground=True)
