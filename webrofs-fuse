@@ -2,13 +2,13 @@
 
 from __future__ import with_statement
 
-from errno import EACCES
 from os.path import realpath
 from sys import argv, exit
 from threading import Lock
-from errno import *
+from errno import ENOENT, EREMOTEIO, EIO
 
 import os
+import time
 
 from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 
@@ -17,13 +17,17 @@ import urllib.error
 import pickle
 
 
-class WebROFs(LoggingMixIn, Operations):
+CACHE_AGE = 60
+
+
+class WebROfs(LoggingMixIn, Operations):
     def __init__(self, url):
         self.url = url
         # download manifest
         self._folders = {}
         self._files = {}
         self._links = {}
+        self._cache = {}
         self._load_manifest()
 
     def _load_manifest(self):
@@ -51,14 +55,51 @@ class WebROFs(LoggingMixIn, Operations):
             print(e)
             raise SystemExit()
 
+    def _add_cached(self, path, data, time):
+        self._cache[path] = (time, data)
+
+    def _remove_cached(self, path):
+        try:
+            del self._cache[path]
+        except:
+            pass
+
+    def _is_cached(self, path):
+        if path in self._cache:
+            # check it has not passed cache age
+            if self._cache[path][0] < (int(time.time()) - CACHE_AGE):
+                # possible race condition
+                self._remove_cached(path)
+                return False
+            else:
+                return True
+        else:
+            return False
+
     def read(self, path, size, offset, fh):
         try:
-            return urllib.request.urlopen(self.url + path).read()[offset:(offset + size)]
-        except KeyError:
-            raise FuseOSError(ENOENT)
-        except urllib.error.HTTPError:
-            raise FuseOSError(EREMOTEIO)
-        except:
+            if path in self._files:
+                if self._is_cached(path):
+                    # return cached version
+                    try:
+                        return self._cache[path][1][offset:(offset + size)]
+                    except:
+                        # there was a problem getting file from cache, get remote copy
+                        return urllib.request.urlopen(self.url + path).read()[offset:(offset + size)]
+                else:
+                    # data is not cached or old, get remote copy
+                    try:
+                        data = urllib.request.urlopen(self.url + path).read()
+                    except urllib.error.HTTPError:
+                        raise FuseOSError(EREMOTEIO)
+                    except Exception as e:
+                        # TODO log the uncaught exception
+                        raise FuseOSError(EIO)
+                    # add to cache and return
+                    self._add_cached(path, data, int(time.time()))
+                    return data[offset:(offset + size)]
+        except Exception as e:
+            # TODO log the uncaught exception
             raise FuseOSError(EIO)
 
     def readlink(self, path):
@@ -90,5 +131,4 @@ if __name__ == '__main__':
     if len(argv) != 3:
         print('usage: %s <url> <mountpoint>' % argv[0])
         exit(1)
-
-    fuse = FUSE(WebROFs(argv[1]), argv[2], foreground=True)
+    fuse = FUSE(WebROfs(argv[1]), argv[2], foreground=True)
