@@ -21,14 +21,16 @@ CACHE_AGE = 60
 
 
 class WebROfs(LoggingMixIn, Operations):
-    def __init__(self, url):
+    def __init__(self, urls):
         # download manifest
         self._folders = {}
         self._files = {}
         self._links = {}
         self._cache = {}
-        print("Starting to download manifest...")
-        self._load_manifest(url)
+        # split urls
+        for url in urls.split(","):
+            print("Download manifest " + url)
+            self._load_manifest(url)
         print("Manifest download complete")
 
     def _load_manifest(self, url):
@@ -41,16 +43,21 @@ class WebROfs(LoggingMixIn, Operations):
                 if not line == "":
                     line = line.split("|")
                     if line[0] == "F":
-                        # this is a folder
-                        self._folders[line[1]] = []
-                        self._files[line[1]] = line[2:] + [url]
+                        # if this folder exists, dont empty it!
+                        if line[1] not in self._folders:
+                            self._folders[line[1]] = []
+                            self._files[line[1]] = line[2:] + [url]
                     elif line[0] == "S":
+                        # symlink
                         self._links[line[1]] = line[2]
                     else:
                         # this is a file
                         fullpath = os.path.join(line[0], line[1])
                         self._files[fullpath] = line[2:] + [url]
-                        self._folders[line[0]].append(line[1])
+                        # if a file exists in a higher stack, don't make two references in
+                        # the directory list
+                        if line[1] not in self._folders[line[0]]:
+                            self._folders[line[0]].append(line[1])
         except Exception as e:
             print("Could not load manifest for volume " + mfile)
             print(e)
@@ -149,6 +156,6 @@ class WebROfs(LoggingMixIn, Operations):
 
 if __name__ == '__main__':
     if len(argv) != 3:
-        print('usage: %s <url> <mountpoint>' % argv[0])
+        print('usage: %s <urls seperate by ,> <mountpoint>' % argv[0])
         exit(1)
     fuse = FUSE(WebROfs(argv[1]), argv[2], foreground=True)
