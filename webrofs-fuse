@@ -29,11 +29,11 @@ class WebROfs(LoggingMixIn, Operations):
         self._cache = {}
         # split urls
         for url in urls.split(","):
-            print("Download manifest " + url)
             self._load_manifest(url)
         print("Manifest download complete")
 
     def _load_manifest(self, url):
+        print("Download manifest " + url)
         try:
             mfile = url + "/manifest"
             response = urllib.request.urlopen(mfile)
