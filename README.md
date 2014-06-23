@@ -18,6 +18,11 @@ Using it
 2. Generate manifest and save at root of structure `webrofs-manifest /var/www/myfiles > /var/www/myfiles/manifest`
 3. On the client side mount the filesystem using `webrofs-fuse http://your-server/myfiles mount-point`
 
+Stacking
+--------
+
+You can specify more than one URL on the commandline, seperated by a comma. This will stack all the manifests on top so that they appear as one volume, similar to unionfs and aufs. The order of manifests is from left to right, that is, for a file that exists in both manifests the rightmost one in the comma seperated list will take priority.
+
 Why?
 ----
 
