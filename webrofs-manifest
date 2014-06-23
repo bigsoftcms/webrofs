@@ -21,6 +21,9 @@ def print_stats(d, f):
 
 
 if __name__ == "__main__":
+    # check for trailing slash
+    if rootDir[-1] != "/":
+        rootDir = rootDir + "/"
     for dirName, subdirList, fileList in os.walk(rootDir, followlinks=False):
         print("F|"+remove_root(dirName) + "|" + print_stats(dirName, "."))
         for fname in fileList:
