@@ -22,17 +22,18 @@ CACHE_AGE = 60
 
 class WebROfs(LoggingMixIn, Operations):
     def __init__(self, url):
-        self.url = url
         # download manifest
         self._folders = {}
         self._files = {}
         self._links = {}
         self._cache = {}
-        self._load_manifest()
+        print("Starting to download manifest...")
+        self._load_manifest(url)
+        print("Manifest download complete")
 
-    def _load_manifest(self):
+    def _load_manifest(self, url):
         try:
-            mfile = self.url + "/manifest"
+            mfile = url + "/manifest"
             response = urllib.request.urlopen(mfile)
             charset = response.info().get_param('charset', 'utf-8')
             data = response.read().decode(charset)
@@ -42,13 +43,13 @@ class WebROfs(LoggingMixIn, Operations):
                     if line[0] == "F":
                         # this is a folder
                         self._folders[line[1]] = []
-                        self._files[line[1]] = line[2:]
+                        self._files[line[1]] = line[2:] + [url]
                     elif line[0] == "S":
                         self._links[line[1]] = line[2]
                     else:
                         # this is a file
                         fullpath = os.path.join(line[0], line[1])
-                        self._files[fullpath] = line[2:]
+                        self._files[fullpath] = line[2:] + [url]
                         self._folders[line[0]].append(line[1])
         except Exception as e:
             print("Could not load manifest for volume " + mfile)
@@ -89,7 +90,13 @@ class WebROfs(LoggingMixIn, Operations):
                 else:
                     # data is not cached or old, get remote copy
                     try:
-                        data = urllib.request.urlopen(self.url + path).read()
+                        # get url for this file
+                        try:
+                            url = self._files[path][8]
+                        except KeyError:
+                            raise FuseOSError(ENOENT)
+                        # get remote copy
+                        data = urllib.request.urlopen(url + path).read()
                     except urllib.error.HTTPError:
                         raise FuseOSError(EREMOTEIO)
                     except Exception as e:
@@ -107,24 +114,37 @@ class WebROfs(LoggingMixIn, Operations):
             return self._links[path]
         except KeyError:
             raise FuseOSError(ENOENT)
-        except:
+        except Exception as e:
+            # TODO log the uncaught exception
             raise FuseOSError(EIO)
 
     def getattr(self, path, fh=None):
-        return {'st_atime': float(self._files[path][0]), 
-            'st_ctime': float(self._files[path][1]),
-            'st_gid': int(self._files[path][2]), 
-            'st_mode': int(self._files[path][3]),
-            'st_mtime': float(self._files[path][4]), 
-            'st_nlink': int(self._files[path][5]), 
-            'st_size': int(self._files[path][6]), 
-            'st_uid': int(self._files[path][7])}
+        try:
+            return {'st_atime': float(self._files[path][0]), 
+                'st_ctime': float(self._files[path][1]),
+                'st_gid': int(self._files[path][2]), 
+                'st_mode': int(self._files[path][3]),
+                'st_mtime': float(self._files[path][4]), 
+                'st_nlink': int(self._files[path][5]), 
+                'st_size': int(self._files[path][6]), 
+                'st_uid': int(self._files[path][7])}
+        except KeyError:
+            raise FuseOSError(ENOENT)
+        except Exception as e:
+            # TODO log the uncaught exception
+            raise FuseOSError(EIO)
 
     def readdir(self, path, fh):
         rlist = ['.', '..']
-        for f in self._folders[path]:
-            rlist.append(f)
-        return rlist
+        try:
+            for f in self._folders[path]:
+                rlist.append(f)
+            return rlist
+        except KeyError:
+            raise FuseOSError(ENOENT)
+        except Exception as e:
+            # TODO log the uncaught exception
+            raise FuseOSError(EIO)
 
 
 if __name__ == '__main__':
