@@ -42,7 +42,10 @@ class WebROfs(LoggingMixIn, Operations):
             for line in data.split("\n"):
                 if not line == "":
                     line = line.split("|")
-                    if line[0] == "F":
+                    if line[0] == "M":
+                        # we link another manifest
+                        self._load_manifest(line[1])
+                    elif line[0] == "F":
                         # if this folder exists, dont empty it!
                         if line[1] not in self._folders:
                             self._folders[line[1]] = []
