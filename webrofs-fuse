@@ -2,20 +2,16 @@
 
 from __future__ import with_statement
 
-from os.path import realpath
 from sys import argv, exit
 from threading import Lock
 from errno import ENOENT, EREMOTEIO, EIO
 
-import os
 import time
 
 from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 
 import urllib.request
 import urllib.error
-import pickle
-
 
 CACHE_AGE = 3600
 
