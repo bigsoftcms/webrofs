@@ -13,6 +13,8 @@ from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 import urllib.request
 import urllib.error
 
+from os.path import join as pathjoin
+
 CACHE_AGE = 3600
 
 
@@ -51,7 +53,7 @@ class WebROfs(LoggingMixIn, Operations):
                         self._links[line[1]] = line[2]
                     else:
                         # this is a file
-                        fullpath = os.path.join(line[0], line[1])
+                        fullpath = pathjoin(line[0], line[1])
                         self._files[fullpath] = line[2:] + [url]
                         # if a file exists in a higher stack, don't make two references in
                         # the directory list
